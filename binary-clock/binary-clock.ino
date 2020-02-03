@@ -21,6 +21,7 @@ void setup() {
   for (int i = 0; i < 11; i++) {
     pinMode(i, OUTPUT);
   }
+  pinMode(11, INPUT);
 
   seconds = 0;
   outputPinState = 0;
@@ -28,7 +29,21 @@ void setup() {
   brightness = 0.2;
 }
 
+// The loop is where everything happens, as per usual. Bookkeeping in this context
+// means keeping track of certain counters related to the various pieces of state
+// being trackded through iterations of the loop (Think Model). Handling input is
+// where external inputs are to be used to update the internal state (Think Controller).
+// And doDisplay is how that internal state is rendered to the world (Think Viewer).
+// The contract here is that doDisplay needs to call the delays that are also
+// used as timing for the clock. It will only call the delay for a sum equal
+// to that of the "tick" variable, so loop should last as long as "tick"
 void loop() {
+  handleBookkeeping();
+  handleInput();
+  doDisplay();
+}
+
+void handleBookkeeping() {
   // ensure that tickCount loops, and seconds tick on the second
   if (tickCount >= ticksPerSec) {
     tickCount = 0;
@@ -40,18 +55,35 @@ void loop() {
     seconds = 0;
   }
 
-  outputPinState = setOutputPinState(seconds);
-  setDisplay();
-  
   tickCount++;
 }
 
-unsigned int setOutputPinState(int seconds) {
+void handleInput(){}
+
+void doDisplay() {
+  computeOutputPinState();
+  
+  // use pulse width modulation via delay to adjust brightness
+  int onPulseWidth = tick * brightness;
+  int offPulseWidth = tick - onPulseWidth;
+  
+  displayNothingViaPins();
+  delay(offPulseWidth);
+
+  displayOutputViaPins();
+  delay(onPulseWidth);
+
+  #ifdef DEBUG
+  displayOutputViaSerial();
+  #endif
+}
+
+void computeOutputPinState() {
   unsigned int secondsMask = computeSecondsMask(seconds);
   unsigned int minutesMask = computeMinutesMask(seconds);
   unsigned int hoursMask = computeHoursMask(seconds);
 
-  return outputPins & secondsMask & minutesMask & hoursMask;
+  outputPinState = outputPins & secondsMask & minutesMask & hoursMask;
 }
 
 unsigned int computeSecondsMask(int seconds) {
@@ -88,22 +120,6 @@ unsigned int computeHoursMask(int seconds) {
 
   // return hours, now shifted, with 1's set for all other bits of the mask
   return mask | ~hourPins;
-}
-
-void setDisplay() {
-  // use pulse width modulation via delay to adjust brightness
-  int onPulseWidth = tick * brightness;
-  int offPulseWidth = tick - onPulseWidth;
-  
-  displayNothingViaPins();
-  delay(offPulseWidth);
-
-  displayOutputViaPins();
-  delay(onPulseWidth);
-
-  #ifdef DEBUG
-  displayOutputViaSerial();
-  #endif
 }
 
 void displayOutputViaPins() {
