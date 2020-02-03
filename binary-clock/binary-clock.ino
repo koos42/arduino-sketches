@@ -1,10 +1,13 @@
-
-// setup pin names
-const int secondPins[1] = {0};
-const int minutePins[6] = {1, 2, 3, 4, 5, 6};
-const int hourPins[6] = {7, 8, 9, 10};
+const unsigned int outputPins = 0x07FF; // 0b 0000 0111 1111 1111
+const unsigned int secondPins = 0x0001; // 0b 0000 0000 0000 0001
+const unsigned int minutePins = 0x007E; // 0b 0000 0000 0111 1110
+const unsigned int hourPins   = 0x0780; // 0b 0000 0111 1000 0000
 
 void setup() {  
+  #ifdef DEBUG
+  Serial.begin(9600);
+  #endif
+
   for (int i = 0; i < 11; i++) {
     pinMode(i, OUTPUT);
   }
@@ -13,48 +16,44 @@ void setup() {
 // the loop function runs over and over again forever
 void loop() {
   int seconds = 0;
-
+  
   // at 12 hours' worth of seconds, allow loop() to complete and restart.
   while (seconds < 43200) {
     seconds += 1;
-    printToPins(seconds);
+    unsigned int outputPinState = setOutputPinState(seconds);
+    displayOutputPinState(outputPinState);
     delay(1000);
   }
 }
 
-void printToPins(int seconds) {
-  printSecondsToPins(seconds);
-  printMinutesToPins(seconds);
-  printHoursToPins(seconds);
+unsigned int setOutputPinState(int seconds) {
+  unsigned int secondsMask = computeSecondsMask(seconds);
+  unsigned int minutesMask = computeMinutesMask(seconds);
+  unsigned int hoursMask = computeHoursMask(seconds);
+
+  return outputPins & secondsMask & minutesMask & hoursMask;
 }
 
-// sets seconds pin high for odd seconds.
-void printSecondsToPins(int seconds) {
-  if (bitRead(seconds, 0)) {
-    digitalWrite(secondPins[0], HIGH);
-  } else {
-    digitalWrite(secondPins[0], LOW);
-  }
+unsigned int computeSecondsMask(int seconds) {
+  unsigned int mask = seconds & secondPins;
+
+  // return seconds, with 1's set for all other bits of the mask
+  return mask | ~secondPins;
 }
 
-
-void printMinutesToPins(int seconds) {
+unsigned int computeMinutesMask(int seconds) {
   // count the number of minutes stored in the seconds variable,
   // mod it by one hour's worth of minutes, to get a number in (0..59)
   int minutes = seconds / 60 % 60;
+  
+  // shift minutes (0..59) one spot left to fit within the minute pins section
+  unsigned int mask = minutes << 1;
 
-  // Set the output pin in the array of minute pins to high or low
-  // depending on the corresponding bit of the minute number.
-  for (int i = 0; i < (sizeof(minutePins) / sizeof(minutePins[0])); i++) {
-    if (bitRead(minutes, i)) {
-      digitalWrite(minutePins[i], HIGH);
-    } else {
-      digitalWrite(minutePins[i], LOW);
-    }
-  }
+  // return minutes, now shifted, with 1's set for all other bits of the mask
+  return mask | ~minutePins;
 }
 
-void printHoursToPins(int seconds) {
+unsigned int computeHoursMask(int seconds) {
   // count the number of hours stored in the seconds variable,
   // mod it by one half day's worth of hours, to get a number in (0..12)
   int hours = seconds / 60 / 60 % 12;
@@ -63,14 +62,40 @@ void printHoursToPins(int seconds) {
   if (hours == 0) {
     hours = 12;
   }
+  
+  // shift hours (1..12) 7 spots left to fit within the hours pins section
+  unsigned int mask = hours << 7;
 
-  // Set the output pin in the array of hours pins to high or low
-  // depending on the corresponding bit of the hour number.
-  for (int i = 0; i < (sizeof(hourPins) / sizeof(hourPins[0])); i++) {
-    if (bitRead(hours, i)) {
-      digitalWrite(hourPins[i], HIGH);
+  // return hours, now shifted, with 1's set for all other bits of the mask
+  return mask | ~hourPins;
+}
+
+void displayOutputPinState(unsigned int outputPinState) {  
+  for (int i = 0; i < 11; i++) {
+    if (bitRead(outputPinState, i)) {
+      digitalWrite(i, HIGH);
     } else {
-      digitalWrite(hourPins[i], LOW);
+      digitalWrite(i, LOW);
     }
   }
+
+  #ifdef DEBUG
+  displayOutputPinStateSerial(outputPinState);
+  #endif
 }
+
+#ifdef DEBUG
+void displayOutputPinStateSerial(unsigned int outputPinState) {
+  Serial.print("pins: 0  1  2  3  4  5  6  7  8  9  10\n");
+  Serial.print("      ");
+  
+  for (int i = 0; i < 11; i++) {
+    if (bitRead(outputPinState, i)) {
+      Serial.print("1  ");
+    } else {
+      Serial.print("0  ");
+    }
+  }
+  Serial.print("\n");
+}
+#endif
