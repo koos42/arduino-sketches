@@ -4,7 +4,8 @@ const unsigned int minutePins = 0x007E; // 0b 0000 0000 0111 1110
 const unsigned int hourPins   = 0x0780; // 0b 0000 0111 1000 0000
 const unsigned int buttonInputPin = 11;
 const unsigned int tick = 10; // in ms.
-const unsigned int ticksPerSec = 1000 / tick;
+const unsigned int msPerSec = 970; // make lenght of a "second" adjustable.
+const unsigned int ticksPerSec = msPerSec / tick;
 
 // model related
 unsigned int seconds;
