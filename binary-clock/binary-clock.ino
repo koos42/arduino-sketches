@@ -2,13 +2,20 @@ const unsigned int outputPins = 0x07FF; // 0b 0000 0111 1111 1111
 const unsigned int secondPins = 0x0001; // 0b 0000 0000 0000 0001
 const unsigned int minutePins = 0x007E; // 0b 0000 0000 0111 1110
 const unsigned int hourPins   = 0x0780; // 0b 0000 0111 1000 0000
+const unsigned int buttonInputPin = 11;
 const unsigned int tick = 10; // in ms.
 const unsigned int ticksPerSec = 1000 / tick;
 
+// model related
 unsigned int seconds;
 unsigned int tickCount;
-float brightness; // a percent
+float brightness; // a percent: (0.0 .. 1.0)
 
+// control related
+bool buttonPressed; // indicates if button is currently pressed
+unsigned int buttonPressTickCount; // seconds at time of button press
+
+// display related
 unsigned int outputPinState;
 
 // #define DEBUG
@@ -21,12 +28,15 @@ void setup() {
   for (int i = 0; i < 11; i++) {
     pinMode(i, OUTPUT);
   }
-  pinMode(11, INPUT);
+  pinMode(buttonInputPin, INPUT);
 
   seconds = 0;
   outputPinState = 0;
   tickCount = 0;
   brightness = 0.2;
+
+  buttonPressed = false;
+  buttonPressTickCount = 0;
 }
 
 // The loop is where everything happens, as per usual. Bookkeeping in this context
@@ -58,7 +68,51 @@ void handleBookkeeping() {
   tickCount++;
 }
 
-void handleInput(){}
+void handleInput(){
+  if (!buttonPressed && digitalRead(buttonInputPin) == HIGH) {
+    initiateButtonPress();
+  } else if (buttonPressed && digitalRead(buttonInputPin) == HIGH) {
+    handleButtonHold();
+  } else if (buttonPressed && digitalRead(buttonInputPin) == LOW) {
+    handleButtonReleased();
+  } else {
+    // the button is not being pressed or has not been let go.
+  }
+}
+
+// don't update the "model", just record that the button press has started
+void initiateButtonPress() {
+  buttonPressed = true;
+  buttonPressTickCount = 0;
+}
+
+void handleButtonHold() {
+  if (buttonPressTickCount >= 2 * ticksPerSec) { // ongoing long press
+
+    // this is a feature, but also a necessity, because it would require
+    // another variable to track if it's already a long click versus a
+    // short click.
+    // add a minute every second
+    seconds += 60;
+
+    // reset buttonPressTickCount so it will "go off" again in a second
+    buttonPressTickCount = ticksPerSec;
+  } else {
+    buttonPressTickCount++;
+  }
+}
+
+void handleButtonReleased() {
+  if (buttonPressTickCount < ticksPerSec) { // end of a short press
+    // add .1 to brightness, but limit it to (0.0..1.0)
+    brightness = (float)((int)(brightness * 10.0 + 1.0) % 11) / 10.0;
+  } else { // end of a long press
+    // NO-OP
+  }
+
+  buttonPressTickCount = 0;
+  buttonPressed = false;
+}
 
 void doDisplay() {
   computeOutputPinState();
@@ -74,7 +128,7 @@ void doDisplay() {
   delay(onPulseWidth);
 
   #ifdef DEBUG
-  displayOutputViaSerial();
+  // displayOutputViaSerial();
   #endif
 }
 
@@ -137,7 +191,6 @@ void displayNothingViaPins() {
     digitalWrite(i, LOW);
   }
 }
-
 
 #ifdef DEBUG
 void displayOutputViaSerial() {
