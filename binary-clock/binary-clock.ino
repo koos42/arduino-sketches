@@ -3,9 +3,9 @@ const unsigned int secondPins = 0x0001; // 0b 0000 0000 0000 0001
 const unsigned int minutePins = 0x007E; // 0b 0000 0000 0111 1110
 const unsigned int hourPins   = 0x0780; // 0b 0000 0111 1000 0000
 const unsigned int buttonInputPin = 11;
-const unsigned int tick = 10; // in ms.
+const unsigned int delayPerTick = 10; // in ms.
 const unsigned int totalDelayPerSec = 985; // make lenght of a "second" adjustable.
-const unsigned int ticksPerSec = totalDelayPerSec / tick;
+const unsigned int ticksPerSec = totalDelayPerSec / delayPerTick;
 
 // model related
 unsigned int seconds;
@@ -47,7 +47,7 @@ void setup() {
 // And doDisplay is how that internal state is rendered to the world (Think Viewer).
 // The contract here is that doDisplay needs to call the delays that are also
 // used as timing for the clock. It will only call the delay for a sum equal
-// to that of the "tick" variable, so loop should last as long as "tick"
+// to that of the "delayPerTick" variable, so loop should last as long as "delayPerTick"
 void loop() {
   handleBookkeeping();
   handleInput();
@@ -107,6 +107,10 @@ void handleButtonReleased() {
   if (buttonPressTickCount < ticksPerSec) { // end of a short press
     // add .1 to brightness, but limit it to (0.0..1.0)
     brightness = (float)((int)(brightness * 10.0 + 1.0) % 11) / 10.0;
+
+    #ifdef DEBUG
+    displayOutputViaSerial();
+    #endif
   } else { // end of a long press
     // NO-OP
   }
@@ -119,8 +123,8 @@ void doDisplay() {
   computeOutputPinState();
   
   // use pulse width modulation via delay to adjust brightness
-  int onPulseWidth = tick * brightness;
-  int offPulseWidth = tick - onPulseWidth;
+  int onPulseWidth = delayPerTick * brightness;
+  int offPulseWidth = delayPerTick - onPulseWidth;
   
   displayNothingViaPins();
   delay(offPulseWidth);
@@ -128,30 +132,27 @@ void doDisplay() {
   displayOutputViaPins();
   delay(onPulseWidth);
 
-  #ifdef DEBUG
-  // displayOutputViaSerial();
-  #endif
 }
 
 void computeOutputPinState() {
-  unsigned int secondsMask = computeSecondsMask(seconds);
-  unsigned int minutesMask = computeMinutesMask(seconds);
-  unsigned int hoursMask = computeHoursMask(seconds);
+  unsigned int secondsMask = computeSecondsMask();
+  unsigned int minutesMask = computeMinutesMask();
+  unsigned int hoursMask = computeHoursMask();
 
   outputPinState = outputPins & secondsMask & minutesMask & hoursMask;
 }
 
-unsigned int computeSecondsMask(int seconds) {
+unsigned int computeSecondsMask() {
   unsigned int mask = seconds & secondPins;
 
   // return seconds, with 1's set for all other bits of the mask
   return mask | ~secondPins;
 }
 
-unsigned int computeMinutesMask(int seconds) {
+unsigned int computeMinutesMask() {
   // count the number of minutes stored in the seconds variable,
   // mod it by one hour's worth of minutes, to get a number in (0..59)
-  int minutes = seconds / 60 % 60;
+  unsigned int minutes = seconds / 60 % 60;
   
   // shift minutes (0..59) one spot left to fit within the minute pins section
   unsigned int mask = minutes << 1;
@@ -160,11 +161,11 @@ unsigned int computeMinutesMask(int seconds) {
   return mask | ~minutePins;
 }
 
-unsigned int computeHoursMask(int seconds) {
+unsigned int computeHoursMask() {
   // count the number of hours stored in the seconds variable,
   // mod it by one half day's worth of hours, to get a number in (0..12)
-  int hours = seconds / 60 / 60 % 12;
-
+  unsigned int hours = seconds / 60 / 60 % 12;
+  
   // don't display 0 hours, display 12 instead.
   if (hours == 0) {
     hours = 12;
@@ -195,7 +196,13 @@ void displayNothingViaPins() {
 
 #ifdef DEBUG
 void displayOutputViaSerial() {
-  Serial.print("pins: 0  1  2  3  4  5  6  7  8  9  10\n");
+  Serial.print("seconds: ");
+  Serial.println(seconds);
+
+  Serial.print("brightness: ");
+  Serial.println(brightness);
+  
+  Serial.println("pins: 0  1  2  3  4  5  6  7  8  9  10");
   Serial.print("      ");
   
   for (int i = 0; i < 11; i++) {
